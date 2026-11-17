@@ -124,12 +124,17 @@ const FS_SKY = GLSL_COMMON + `
 in vec2 vUv; uniform vec3 uRight, uUp, uFwd; uniform vec2 uTan; out vec4 o;
 void main(){ vec2 nd=vUv*2.-1.; vec3 d=normalize(uFwd+uRight*nd.x*uTan.x+uUp*nd.y*uTan.y); o=vec4(skyColor(d,1.,2),1.); }`;
 const VS_WATER = `#version 300 es
-layout(location=0) in vec3 aPos; uniform mat4 uVP; out vec3 vPos; void main(){ vPos=aPos; gl_Position=uVP*vec4(aPos,1.); }`;
+layout(location=0) in vec3 aPos; uniform mat4 uVP; void main(){ gl_Position=uVP*vec4(aPos,1.); }`;
 const FS_WATER = GLSL_COMMON + `
-in vec3 vPos; uniform sampler2D uRefl; uniform vec2 uRes; uniform vec3 uWater; out vec4 o;
+uniform sampler2D uRefl; uniform vec2 uRes, uTan; uniform vec3 uWater, uRight, uUp, uFwd; uniform float uWaterY; out vec4 o;
 float wh(vec2 q){ float t=uTime; return vnoise(q*0.33+vec2(t*.35,t*.21))*.62+vnoise(q*0.95-vec2(t*.5,-t*.33))*.28+vnoise(q*2.3+vec2(-t*.7,t*.6))*.1; }
 void main(){
-  vec3 V=vPos-uCam; float dist=length(V); V/=dist;
+  // Where this pixel's ray meets the sea, worked out here. Interpolating a position across
+  // the one huge quad loses precision, and the ripples then jump as the camera moves.
+  vec2 nd=gl_FragCoord.xy/uRes*2.-1.;
+  vec3 V=normalize(uFwd+uRight*nd.x*uTan.x+uUp*nd.y*uTan.y);
+  float dist=min(abs((uWaterY-uCam.y)/(abs(V.y)<1e-5?1e-5:V.y)),14000.);
+  vec3 vPos=uCam+V*dist;
   vec2 q=vPos.xz; float e=0.35; float h0=wh(q);
   float amp=0.55/(1.+dist*0.012);
   vec3 N=normalize(vec3(-(wh(q+vec2(e,0.))-h0)/e*amp,1.,-(wh(q+vec2(0.,e))-h0)/e*amp));
@@ -154,16 +159,19 @@ precision highp float; precision highp sampler2D; in vec2 vUv; uniform sampler2D
 void main(){ vec3 c=texture(uTex,vUv+uTexel*vec2(-2,0)).rgb+texture(uTex,vUv+uTexel*vec2(2,0)).rgb+texture(uTex,vUv+uTexel*vec2(0,-2)).rgb+texture(uTex,vUv+uTexel*vec2(0,2)).rgb;
   c+=2.*(texture(uTex,vUv+uTexel*vec2(-1,-1)).rgb+texture(uTex,vUv+uTexel*vec2(1,-1)).rgb+texture(uTex,vUv+uTexel*vec2(-1,1)).rgb+texture(uTex,vUv+uTexel*vec2(1,1)).rgb); o=vec4(c/12.,1.); }`;
 const FS_POST = `#version 300 es
-precision highp float; precision highp sampler2D; in vec2 vUv; uniform sampler2D uScene, uBloom; uniform float uExposure, uBloomMix, uBloomN, uFade, uSeed; out vec4 o;
+precision highp float; precision highp sampler2D; in vec2 vUv; uniform sampler2D uScene, uBloom; uniform float uExposure, uBloomMix, uBloomN, uFade, uSeed, uSplit; out vec4 o;
 vec3 aces(vec3 x){ return clamp((x*(2.51*x+.03))/(x*(2.43*x+.59)+.14),0.,1.); }
 float hash12(vec2 p){ vec3 p3=fract(vec3(p.xyx)*.1031); p3+=dot(p3,p3.yzx+33.33); return fract((p3.x+p3.y)*p3.z); }
 void main(){
-  vec3 c=texture(uScene,vUv).rgb, b=texture(uBloom,vUv).rgb/uBloomN;
+  // uSplit: both halves show the middle half of the picture, the left one as a flat grey model.
+  vec2 uv=uSplit>.5 ? vec2(vUv.x+(vUv.x<.5?.25:-.25),vUv.y) : vUv;
+  vec3 c=texture(uScene,uv).rgb, b=texture(uBloom,uv).rgb/uBloomN;
   c=mix(c,b,uBloomMix)+max(b-1.,0.)*.35;
   c*=uExposure;
   vec2 d=vUv-.5; c*=1.-dot(d,d)*.42;
   c=aces(c);
   float l=dot(c,vec3(.2126,.7152,.0722)); c=mix(vec3(l),c,1.1);
+  if(uSplit>.5 && vUv.x<.5){ c=mix(vec3(l),c,.32)*vec3(.80,.82,.86)+.03; }
   c=pow(c,vec3(1./2.2));
   c+=(hash12(gl_FragCoord.xy+uSeed)-.5)/255.;
   o=vec4(c*uFade,1.);
@@ -232,7 +240,13 @@ function initGL() {
   G.empty = gl.createVertexArray();
   const wy = SEA + 0.82, E = 9000;
   G.waterY = wy;
-  G.waterVao = vao({ pos: new Float32Array([-E, wy, -E, -E, wy, E, E, wy, E, E, wy, -E]), index: new Uint32Array([0, 1, 2, 0, 2, 3]) });
+  // The sea is a grid, fine over the island and coarser with distance. As one huge quad its
+  // depth was interpolated too coarsely: the waterline crept up and down the shore between frames.
+  { const axis = (n) => { const a = []; for (let v = -64; v <= n + 64; v += 16) a.push(v); for (let s = 64; s < E; s *= 2) { a.unshift(a[0] - s); a.push(a[a.length - 1] + s); } return a; };
+    const xs = axis(W), zs = axis(D), pos = [], index = [];
+    for (const z of zs) for (const x of xs) pos.push(x, wy, z);
+    for (let j = 0; j < zs.length - 1; j++) for (let i = 0; i < xs.length - 1; i++) { const a = j * xs.length + i, b = a + 1, c = a + xs.length, d = c + 1; index.push(a, c, d, a, d, b); }
+    G.waterVao = vao({ pos: new Float32Array(pos), index: new Uint32Array(index) }); }
   // materials: one texel of colour and style, one of second colour and strength
   const mt = new Float32Array(128 * 2 * 4);
   for (const m of MAT) if (m) { mt.set([...m.col, m.style], m.id * 4); mt.set([...m.b, m.p], (128 + m.id) * 4); }
@@ -257,8 +271,9 @@ const SKIES = {
   noon: { el: 58, sun: [1.0, 0.97, 0.9], sunI: 4.4, zen: [0.13, 0.30, 0.70], hor: [0.56, 0.72, 0.92], fogc: [0.60, 0.74, 0.92], fog: [0.0009, 0.03, 0.2], amb: [0.42, 0.56, 0.86], ambI: 0.95, gnd: [0.30, 0.28, 0.24], cloud: 0, night: 0, exp: 0.9, water: [0.012, 0.075, 0.13] },
 };
 function light(name, az) {
-  const s = SKIES[name], e = (s.el * Math.PI) / 180, a = (az * Math.PI) / 180;
-  return { ...s, name, az, dir: [Math.cos(e) * Math.sin(a), Math.sin(e), -Math.cos(e) * Math.cos(a)] };
+  // name is a sky, or { base, ...changes } for one shot's own light.
+  const s = typeof name === "string" ? SKIES[name] : { ...SKIES[name.base], ...name }, e = (s.el * Math.PI) / 180, a = (az * Math.PI) / 180;
+  return { ...s, name: s.base || name, az, dir: [Math.cos(e) * Math.sin(a), Math.sin(e), -Math.cos(e) * Math.cos(a)] };
 }
 
 // ───────────────────────── drawing ─────────────────────────
@@ -326,11 +341,12 @@ function drawFrame(cam, L, t, opts = {}) {
   gl.useProgram(G.water.p); setCommon(G.water, L, cam.pos, t);
   gl.uniformMatrix4fv(G.water.u.uVP, false, VP); gl.uniform2f(G.water.u.uRes, RW, RH); gl.uniform3f(G.water.u.uWater, ...L.water);
   gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, G.refl.tex); gl.uniform1i(G.water.u.uRefl, 0);
-  gl.disable(gl.CULL_FACE); gl.bindVertexArray(G.waterVao.v); gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_INT, 0);
+  const bs = basis(cam.pos, cam.at, up), th = Math.tan(fov / 2);
+  gl.uniform3f(G.water.u.uRight, ...bs.r); gl.uniform3f(G.water.u.uUp, ...bs.u); gl.uniform3f(G.water.u.uFwd, ...bs.f); gl.uniform2f(G.water.u.uTan, th * asp, th); gl.uniform1f(G.water.u.uWaterY, wy);
+  gl.disable(gl.CULL_FACE); gl.bindVertexArray(G.waterVao.v); gl.drawElements(gl.TRIANGLES, G.waterVao.n, gl.UNSIGNED_INT, 0);
   // sky, last, where nothing else was drawn
   gl.depthMask(false); gl.disable(gl.CULL_FACE);
   gl.useProgram(G.sky.p); setCommon(G.sky, L, cam.pos, t);
-  const bs = basis(cam.pos, cam.at, up), th = Math.tan(fov / 2);
   gl.uniform3f(G.sky.u.uRight, ...bs.r); gl.uniform3f(G.sky.u.uUp, ...bs.u); gl.uniform3f(G.sky.u.uFwd, ...bs.f); gl.uniform2f(G.sky.u.uTan, th * asp, th);
   fullscreen(G.sky);
   gl.depthMask(true);
@@ -347,7 +363,7 @@ function drawFrame(cam, L, t, opts = {}) {
   gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, RW, RH); gl.useProgram(G.post.p);
   gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, G.resolve.tex); gl.uniform1i(G.post.u.uScene, 0);
   gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, G.bloom[0].tex); gl.uniform1i(G.post.u.uBloom, 2);
-  gl.uniform1f(G.post.u.uExposure, L.exp); gl.uniform1f(G.post.u.uBloomMix, 0.11); gl.uniform1f(G.post.u.uBloomN, G.bloom.length); gl.uniform1f(G.post.u.uFade, fade); gl.uniform1f(G.post.u.uSeed, Math.floor(t * FPS) * 1.37);
+  gl.uniform1f(G.post.u.uExposure, L.exp); gl.uniform1f(G.post.u.uBloomMix, 0.11); gl.uniform1f(G.post.u.uBloomN, G.bloom.length); gl.uniform1f(G.post.u.uFade, fade); gl.uniform1f(G.post.u.uSplit, opts.split ? 1 : 0); gl.uniform1f(G.post.u.uSeed, Math.floor(t * FPS) * 1.37);
   fullscreen();
   gl.depthMask(true);
 }

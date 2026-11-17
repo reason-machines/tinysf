@@ -17,16 +17,25 @@ function makeShots() {
   const endPos = [ic[0], SEA + 1 + endH, ic[1] + (540 - CARD.markY) * perPx], startPos = [240, 150, 146];
   const reveal = (u) => { const k = ease(clamp(u / 0.86, 0, 1)), kk = k * k * (3 - 2 * k); const p = [mix(startPos[0], endPos[0], kk), startPos[1] * Math.pow(endPos[1] / startPos[1], k), mix(startPos[2], endPos[2], kk)]; return { pos: p, at: [p[0], 0, p[2] - 0.001], fov: fovR, up: [0, 0, -1], near: 20 }; };
 
-  // Fourteen moves on the cut list of the post this answers (same order of subjects, same
-  // lengths to the frame at 30 fps), then the pull-back to the mark. No captions.
+  // The first eight moves follow the post this answers shot for shot: the same lengths to the
+  // frame at 30 fps (cuts at 2.5, 5.0, 7.75, 10.9, 13.9, 16.4, 17.9 and 19.6 s), the same framing,
+  // move and light, with our landmarks standing in. The rest keeps its order of subjects. No captions.
+  // around: a camera circling c at bearing b (0 = north of it), looking lx blocks to the right of it.
+  const around = (c, b0, b1, r0, r1, y0, y1, ly, fov, lx = 0) => (u) => { const b = (mix(b0, b1, u) * Math.PI) / 180, r = mix(r0, r1, u); return { pos: [c[0] + r * Math.sin(b), mix(y0, y1, u), c[1] - r * Math.cos(b)], at: [c[0] - lx * Math.cos(b), ly, c[1] - lx * Math.sin(b)], fov }; };
+  // fly: a straight flight on a turning heading, looking down at a fixed pitch.
+  const fly = (p0, p1, h0, h1, pitch, fov) => (u) => { const p = V3.mix(p0, p1, u), h = (mix(h0, h1, u) * Math.PI) / 180, q = (pitch * Math.PI) / 180; return { pos: p, at: [p[0] + 50 * Math.sin(h) * Math.cos(q), p[1] - 50 * Math.sin(q), p[2] - 50 * Math.cos(h) * Math.cos(q)], fov }; };
+  const HAZE = { base: "gold", el: 17, night: 0, cloud: 0.5, fog: [0.0075, 0.045, 1.2], zen: [0.34, 0.36, 0.72], hor: [1.0, 0.68, 0.50], fogc: [1.0, 0.70, 0.52], exp: 0.9 };
+  const WARM = { base: "day", el: 30, hor: [0.98, 0.74, 0.58], fogc: [0.97, 0.76, 0.60], fog: [0.0042, 0.04, 0.5], cloud: 0.42, zen: [0.07, 0.22, 0.70] };
+  const CLEAR = { base: "day", cloud: 0.35 };
   SHOTS = [
-    { dur: 75, sky: "gold", az: 194, cam: line([345, 37, 53], [333, 34, 63], [303, 27.5, 112], null, 56) }, // Coit Tower into the sun
-    { dur: 159, sky: "gold", az: 192, dry: true, cam: line([217, 44, 206], [206, 43, 215], [126, 61, 272], [126, 62, 272], 57) }, // Sutro Tower over the sign
-    { dur: 92, sky: "day", az: 150, live: true, cam: orbit(P.ferry, 50, 46, 31, 28, 108, 132, 24, 55) }, // Ferry Building from the bay
-    { dur: 90, sky: "day", az: 128, dry: true, cam: down([126, 132, 204], [154, 132, 187], 50) }, // row houses, straight down
-    { dur: 75, sky: "day", az: 248, dry: true, live: true, cam: line([P.alamo[0] - 0.5, ag + 1.3, P.alamo[1] + 5.5], [P.alamo[0] + 1.4, ag + 1.2, P.alamo[1] + 4.4], [P.alamo[0] + 22, ag + 3, P.alamo[1] - 1], null, 50) }, // Alamo Square, at corgi height
-    { dur: 45, sky: "gold", az: 236, cam: line([233, 22, 121], [230, 22.6, 123], [203, 34, 137], null, 60) }, // a bridge tower, close
-    { dur: 52, sky: "gold", az: 160, live: true, cam: orbit(P.palace, 52, 49, 41, 39, -128, -143, 16, 50) }, // Palace of Fine Arts
+    { dur: 75, sky: HAZE, az: 186, cam: around(P.coit, 40, 72, 45, 45, 27, 28, 26, 86) }, // Coit Tower, circled, the sun low behind the skyline
+    { dur: 75, sky: WARM, az: 190, cam: around(P.sutro, 62, 62, 65, 61, 38, 38.5, 51, 84) }, // Sutro Tower over the sign, pushing in
+    { dur: 83, sky: CLEAR, az: 120, live: true, cam: around(P.ferry, 125, 119, 58, 57, 17, 17, 17.5, 70, 8) }, // Ferry Building where the source has the Statue of Liberty
+    { dur: 94, sky: CLEAR, az: 140, live: true, split: true, cam: fly([176, 55, 148], [168, 55, 205], 172, 190, 55, 60) }, // the source's split screen: grey model left, the build right
+    { dur: 90, sky: CLEAR, az: 140, live: true, cam: line([150, 27, 232], [176, 26, 227], [250, 12, 214], [270, 12, 212], 62) }, // just above the rooftops
+    { dur: 75, sky: "gold", az: 236, cam: line([233, 22, 121], [230, 22.6, 123], [203, 34, 137], null, 60) }, // a bridge tower, close
+    { dur: 45, sky: "gold", az: 160, live: true, cam: orbit(P.palace, 52, 49, 41, 39, -128, -143, 16, 50) }, // Palace of Fine Arts
+    { dur: 52, sky: "day", az: 248, dry: true, live: true, cam: line([P.alamo[0] - 0.5, ag + 1.3, P.alamo[1] + 5.5], [P.alamo[0] + 1.4, ag + 1.2, P.alamo[1] + 4.4], [P.alamo[0] + 22, ag + 3, P.alamo[1] - 1], null, 50) }, // Alamo Square, at corgi height
     { dur: 68, sky: "day", az: 110, dry: true, live: true, cam: line([256, 33, 320], [248, 29.5, 308], [220, 14, 266], null, 55) }, // SoMa
     { dur: 59, sky: "gold", az: 252, dry: true, cam: orbit(P.salesforce, 116, 110, 62, 70, -14, 4, 66, 40) }, // Salesforce Tower
     { dur: 60, sky: "karl", az: 205, dry: true, cam: line([347, 72, 118], [340, 69, 124], [300, 52, 153], null, 50) }, // the Pyramid in Karl the Fog
@@ -49,13 +58,13 @@ function seek(frame) {
   while (f >= SHOTS[i].dur) { f -= SHOTS[i].dur; i++; }
   let s = SHOTS[i], u = f / s.dur, card = 0;
   if (s.card) { card = clamp((f + 1) / CARD.fade, 0, 1); s = SHOTS[i - 1]; u = 1; }
-  if (card < 1) drawFrame(s.cam(u), light(s.sky, s.az), t, { prog: s.prog(u), noRefl: s.dry, live: s.live });
+  if (card < 1) drawFrame(s.cam(u), light(s.sky, s.az), t, { prog: s.prog(u), noRefl: s.dry, live: s.live, split: s.split });
   $("bug").style.opacity = card ? 0 : 0.9;
   $("card").style.display = card ? "block" : "none"; $("card").style.opacity = card;
   return painted();
 }
 // Scouting: draw one camera under one sky. cam = [px,py,pz, ax,ay,az, fov, topDown], t in seconds.
-window.debugCam = (c, sky = "day", az = 140, t = 0, prog) => { drawFrame({ pos: c.slice(0, 3), at: c.slice(3, 6), fov: c[6] || 50, up: c[7] ? [0, 0, -1] : [0, 1, 0] }, light(sky, az), t, { prog, live: true }); return painted(); };
+window.debugCam = (c, sky = "day", az = 140, t = 0, prog, split) => { drawFrame({ pos: c.slice(0, 3), at: c.slice(3, 6), fov: c[6] || 50, up: c[7] ? [0, 0, -1] : [0, 1, 0] }, light(sky, az), t, { prog, live: true, split }); return painted(); };
 
 function startFilm() {
   document.body.classList.add("film");
