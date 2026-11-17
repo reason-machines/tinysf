@@ -33,7 +33,7 @@ function makeShots() {
     { dur: 60, sky: "gold", az: 200, cam: line([236, 27, 62], [244, 26, 70], [240, 26, 137], null, 60) }, // the whole bridge
     { dur: 82, sky: "day", az: 110, dry: true, cam: orbit(P.site, 50, 44, 36, 40, 158, 196, 24, 45), prog: (u) => Math.floor(clamp(u / 0.85, 0, 1) * site.n) }, // a tower going up
     { dur: 82, sky: "day", az: 118, cam: line([452, 10, 6], [424, 12, 22], [246, 30, 178], null, 50) }, // the island from the water
-    { dur: 82, sky: "day", az: 100, dry: true, cam: line([318.5, 10, 198.5], [315.5, 10, 201.5], [298, 88, 216], [298, 96, 217], 75) }, // looking up
+    { dur: 82, sky: "day", az: 100, dry: true, cam: line([318.5, 13.5, 198.5], [315.5, 13.5, 201.5], [298, 88, 216], [298, 96, 217], 75) }, // looking up, from above the traffic
     { dur: 78, sky: "noon", az: 150, dry: true, cam: reveal },
     { dur: 45, card: true },
   ];
