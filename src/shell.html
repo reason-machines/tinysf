@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>tiny SF</title>
+<meta name="description" content="San Francisco rebuilt in blocks on one tiny hexagonal island. Walk around it, or watch the film.">
+<!--
+  tiny SF: San Francisco rebuilt in blocks on one tiny hexagonal island.
+  The island's outline is the Reason mark.
+
+  This file is built from src/ by build.ts and needs nothing else: no
+  network, no assets. Open it to walk around; add ?film to watch the film.
+-->
+<style>
+html,body{margin:0;height:100%;background:#000;overflow:hidden;overscroll-behavior:none}
+#stage{position:absolute;left:0;top:0;width:100vw;height:100vh;overflow:hidden;background:#000}
+#gl{position:absolute;left:0;top:0;width:100%;height:100%;display:block;touch-action:none}
+.film #stage{width:1920px;height:1080px;transform-origin:0 0}
+.film #gl{width:1920px;height:1080px}
+#bug,#card{display:none}
+.film #bug{position:absolute;right:84px;top:66px;display:flex;align-items:center;gap:14px;color:#fff;font-family:"Inter",sans-serif;font-size:30px;font-weight:500;letter-spacing:-.02em;opacity:.92;filter:drop-shadow(0 2px 12px rgba(0,0,0,.45))}
+#bug img{height:34px;filter:invert(1)}
+#card{position:absolute;inset:0;background:#F6F7F3;color:#141414;font-family:"Inter",sans-serif}
+#cmark{position:absolute;left:50%;top:50%}
+#cword{position:absolute;left:0;right:0;top:536px;text-align:center;font-size:132px;font-weight:500;letter-spacing:-.045em}
+#curl{position:absolute;left:0;right:0;top:742px;text-align:center;font-family:"JetBrains Mono",monospace;font-size:36px;font-weight:450;letter-spacing:-.01em;color:#141414}
+#loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#d8d8d2;font:500 15px/1.5 ui-monospace,Menlo,monospace;text-align:center;padding:24px;background:#0c0d0f}
+.film #loading{display:none}
+/* on foot */
+#hud{position:absolute;inset:0;pointer-events:none;color:#fff;font-family:"Inter",system-ui,sans-serif;user-select:none;-webkit-user-select:none;text-shadow:0 1px 10px rgba(0,0,0,.55),0 0 2px rgba(0,0,0,.5)}
+.film #hud{display:none}
+#hud .top{position:absolute;left:18px;top:16px;display:flex;align-items:center;gap:10px;font-size:17px;font-weight:550;letter-spacing:-.01em}
+#hudmark{height:22px;filter:invert(1) drop-shadow(0 1px 6px rgba(0,0,0,.5))}
+#hud .top span{opacity:.75;font-weight:450}
+#place{position:absolute;left:18px;bottom:54px;font-family:"JetBrains Mono",ui-monospace,monospace;font-size:22px;font-weight:600;letter-spacing:-.01em}
+#keys{position:absolute;left:18px;bottom:18px;font-family:"JetBrains Mono",ui-monospace,monospace;font-size:12.5px;opacity:.85;white-space:nowrap}
+#corgis{position:absolute;right:18px;bottom:18px;font-family:"JetBrains Mono",ui-monospace,monospace;font-size:13px;opacity:.9}
+#toast{position:absolute;left:50%;top:22%;transform:translateX(-50%);font-family:"JetBrains Mono",ui-monospace,monospace;font-size:20px;font-weight:600;opacity:0;transition:opacity .25s;white-space:nowrap}
+#bar{position:absolute;right:14px;top:12px;display:flex;gap:8px;pointer-events:auto;flex-wrap:wrap;justify-content:flex-end;max-width:70vw}
+#bar button,#bar select,#bar a{font:500 13px "Inter",system-ui,sans-serif;color:#fff;background:rgba(18,20,24,.52);border:1px solid rgba(255,255,255,.22);border-radius:9px;padding:7px 11px;cursor:pointer;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);text-decoration:none;text-shadow:none;appearance:none;-webkit-appearance:none}
+#bar button:hover,#bar select:hover,#bar a:hover{background:rgba(18,20,24,.72)}
+#bar select option{color:#111;background:#fff}
+#start{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;background:rgba(10,12,14,.34);pointer-events:auto;cursor:pointer;text-align:center;padding:20px}
+#start h1{margin:0;font-size:clamp(30px,6vw,60px);font-weight:550;letter-spacing:-.035em}
+#start p{margin:0;font-size:clamp(14px,2vw,18px);opacity:.92;max-width:34em;line-height:1.45}
+#start .go{margin-top:12px;font:600 15px "Inter",system-ui,sans-serif;color:#141414;background:#F6F7F3;border-radius:999px;padding:11px 22px;text-shadow:none}
+#online{margin-left:8px;font-size:13px;font-weight:500;opacity:.9}
+#labels{position:absolute;inset:0;overflow:hidden}
+.tag{position:absolute;left:0;top:0;display:flex;flex-direction:column;align-items:center;gap:3px;white-space:nowrap;will-change:transform}
+.tag span{font:600 13px "Inter",system-ui,sans-serif;background:rgba(18,20,24,.5);padding:2px 7px;border-radius:7px;text-shadow:none}
+.tag i{font:500 13px "Inter",system-ui,sans-serif;font-style:normal;color:#141414;background:#F6F7F3;padding:4px 9px;border-radius:10px;text-shadow:none;max-width:260px;white-space:normal;text-align:center}
+.tag i:empty{display:none}
+#log{position:absolute;left:18px;bottom:92px;max-width:min(520px,70vw);font:500 14px/1.4 "Inter",system-ui,sans-serif}
+#log div{transition:opacity .9s;overflow-wrap:anywhere}
+#log b{font-weight:650}
+#say{display:none;position:absolute;left:50%;bottom:64px;transform:translateX(-50%);width:min(520px,80vw);pointer-events:auto;font:500 15px "Inter",system-ui,sans-serif;color:#fff;background:rgba(18,20,24,.72);border:1px solid rgba(255,255,255,.3);border-radius:10px;padding:10px 13px;outline:none}
+#name{pointer-events:auto;cursor:text;margin-top:8px;width:min(330px,76vw);text-align:center;font:500 15px "Inter",system-ui,sans-serif;color:#fff;background:rgba(18,20,24,.55);border:1px solid rgba(255,255,255,.3);border-radius:10px;padding:9px 12px;outline:none}
+#name::placeholder,#say::placeholder{color:rgba(255,255,255,.6)}
+#cross{position:absolute;left:50%;top:50%;width:5px;height:5px;margin:-2.5px;border-radius:50%;background:rgba(255,255,255,.75);box-shadow:0 0 4px rgba(0,0,0,.6)}
+#stick{position:absolute;left:28px;bottom:96px;width:112px;height:112px;border-radius:50%;border:1.5px solid rgba(255,255,255,.4);background:rgba(18,20,24,.22);display:none}
+#stick i{position:absolute;left:50%;top:50%;width:46px;height:46px;margin:-23px;border-radius:50%;background:rgba(255,255,255,.55)}
+#jump{position:absolute;right:28px;bottom:110px;width:66px;height:66px;border-radius:50%;border:1.5px solid rgba(255,255,255,.4);background:rgba(18,20,24,.22);display:none;align-items:center;justify-content:center;font:600 12px "Inter",system-ui,sans-serif;pointer-events:auto}
+.touch #stick{display:block}.touch #jump{display:flex}.touch #keys{display:none}.touch #place{bottom:20px}.touch #log{bottom:56px}
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="gl" width="1920" height="1080"></canvas>
+  <div id="bug"><img id="bugmark" alt=""><span>Reason</span></div>
+  <div id="card"><img id="cmark" alt=""><div id="cword">Reason</div><div id="curl">tinysf.reasonmachines.com</div></div>
+  <div id="hud">
+    <div class="top"><img id="hudmark" alt=""><b>tiny SF</b><span>by Reason</span><span id="online"></span></div>
+    <div id="labels"></div>
+    <div id="log"></div>
+    <input id="say" maxlength="140" placeholder="say something to people nearby" autocomplete="off">
+    <div id="bar">
+      <select id="people" title="Go to a person" style="display:none"><option value="">People</option></select>
+      <select id="jumpto" title="Go to a place"><option value="">Go to…</option></select>
+      <button id="meet" title="Copy a link that lands people right here">Meet here</button>
+      <button id="saybtn" title="Enter">Say</button>
+      <button id="wave" title="G">Wave</button>
+      <button id="respawn" title="R">Somewhere else</button>
+      <button id="sky" title="T">Time of day</button>
+      <button id="fly" title="F">Fly</button>
+      <button id="third" title="V">View</button>
+      <a id="tofilm" href="?film">Watch the film</a>
+    </div>
+    <div id="cross"></div>
+    <div id="toast"></div>
+    <div id="place"></div>
+    <div id="keys">WASD move · mouse look · space jump · shift run · enter talk · G wave · V view · F fly · R somewhere else · T time of day</div>
+    <div id="corgis"></div>
+    <div id="stick"><i></i></div>
+    <div id="jump">JUMP</div>
+    <div id="start"><h1>tiny SF</h1><p>San Francisco, rebuilt in blocks on one tiny hexagonal island. You have been dropped somewhere on it, and so has everyone else who is online. Find the corgis.</p><input id="name" maxlength="18" placeholder="your name (or keep the one you are given)" autocomplete="off"><div class="go">Walk around</div></div>
+  </div>
+  <div id="loading">stacking San Francisco, one block at a time…</div>
+</div>
+<script>
+"use strict";
+const FONTS = { "Inter": "__INTER__", "JetBrains Mono": "__MONO__" };
+const MARK_PNG = "__MARK__";
+__CODE__
+</script>
+</body>
+</html>

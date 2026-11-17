@@ -1,0 +1,14 @@
+{
+  "name": "tiny-sf",
+  "private": true,
+  "type": "module",
+  "description": "San Francisco rebuilt in blocks on one tiny hexagonal island: a walkable world and a drone film, in one HTML file.",
+  "scripts": {
+    "build": "bun build.ts",
+    "serve": "bun server/server.ts",
+    "server": "bun build server/server.ts --target=bun --outfile dist/server.js",
+    "meet": "bun test/meet.ts",
+    "stills": "bun render.ts --scale 0.5 --frames mid",
+    "film": "bun render.ts --scale 0.75 --jobs 3"
+  }
+}
